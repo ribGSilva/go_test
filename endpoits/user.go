@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"perf_test/structs"
 	"time"
 
@@ -21,17 +22,24 @@ func PostUser(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"message": "empty response",
 		})
+		return
 	}
 	var createUserRequest structs.CreateUserRequest
 	if err := json.Unmarshal(jsonData, &createUserRequest); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"message": "wrong bady",
 		})
+		return
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://localhost:27017"))
+	mongoConnection := os.Getenv("MONGO")
+	if mongoConnection == "" {
+		mongoConnection = "mongodb://localhost:27017"
+	}
+
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(mongoConnection))
 	defer func() {
 		if err = client.Disconnect(ctx); err != nil {
 			panic(err)
@@ -43,6 +51,7 @@ func PostUser(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"message": "fail to creating user",
 		})
+		return
 	}
 	id := res.InsertedID
 	c.JSON(http.StatusCreated, gin.H{
@@ -55,7 +64,12 @@ func GetUser(c *gin.Context) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://localhost:27017"))
+	mongoConnection := os.Getenv("MONGO")
+	if mongoConnection == "" {
+		mongoConnection = "mongodb://localhost:27017"
+	}
+
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(mongoConnection))
 	defer func() {
 		if err = client.Disconnect(ctx); err != nil {
 			panic(err)
@@ -70,6 +84,7 @@ func GetUser(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"message": "wrong id format",
 		})
+		return
 	}
 	filter := bson.M{"_id": filterId}
 
@@ -79,10 +94,12 @@ func GetUser(c *gin.Context) {
 
 	if err == mongo.ErrNoDocuments {
 		c.Status(http.StatusNotFound)
+		return
 	} else if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"message": "fail to creating user",
+			"message": err,
 		})
+		return
 	}
 	c.JSON(http.StatusOK, getUserResponse)
 }
